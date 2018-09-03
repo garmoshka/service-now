@@ -1,0 +1,75 @@
+// Verify attachment is included and in correct format
+producer.sys_id = current.sys_id;
+var grAttach = new GlideRecord("sys_attachment");
+grAttach.addQuery("table_sys_id", current.sys_id);
+var oC = grAttach.addQuery("table_name", "sys_data_source");
+oC.addOrCondition("table_name", "sc_cart_item");
+grAttach.query();
+if (!grAttach.next()) {
+	gs.addErrorMessage("You must attach a file to submit. Your import submission has been aborted.");
+	current.setAbortAction(true);
+	producer.redirect="com.glideapp.servicecatalog_cat_item_view.do?sysparm_id=9c015e46376e57001dbdd5c543990eae";
+}
+else{
+	//Get the glide record for the selected import type
+	var grWizard = new GlideRecord('u_swis_import_configuration');
+	grWizard.addQuery('sys_id',producer.type);
+	grWizard.query();
+	if(grWizard.next()){
+		if(grAttach.getRowCount() > 1){
+			gs.addErrorMessage("You may only attach one file at a time for this import wizard. Your import submission has been aborted.");
+			current.setAbortAction(true);
+			producer.redirect="com.glideapp.servicecatalog_cat_item_view.do?sysparm_id=9c015e46376e57001dbdd5c543990eae";
+		}
+		//check to make sure the file format is correct on the attachment
+		var passedFormatCheck = false;
+		var errorCaught = true;
+		if (grWizard.u_expected_data_format == 'CSV'){
+			if (grAttach.file_name.endsWith('.csv') == true){
+				passedFormatCheck = true;
+			}
+			else{
+				gs.addErrorMessage("This import type is expecting submission of a CSV file (.csv), but a different file format was attached. Your import submission has been aborted.");
+				current.setAbortAction(true);
+				producer.redirect="com.glideapp.servicecatalog_cat_item_view.do?sysparm_id=9c015e46376e57001dbdd5c543990eae";
+			}
+		}
+		else if (grWizard.u_expected_data_format == 'Excel'){
+			if(grAttach.file_name.endsWith('.xlsx') == true){
+				passedFormatCheck = true;
+			}
+			else{
+				gs.addErrorMessage("This import type is expecting submission of an Excel file (.xls), but a different file format was attached. Your import submission has been aborted.");
+				current.setAbortAction(true);
+				producer.redirect="com.glideapp.servicecatalog_cat_item_view.do?sysparm_id=9c015e46376e57001dbdd5c543990eae";
+			}
+		}
+		
+		if(passedFormatCheck == true){
+			// Create data source record (based on form import type selection record)
+			current.name = grWizard.u_data_source_name_prefix + '_' + gs.nowDateTime();
+			current.format = grWizard.u_expected_data_format;
+			current.import_set_table_name = grWizard.u_import_set_table;
+			current.header_row = grWizard.u_header_row;
+			current.sheet_number = grWizard.u_sheet_number;
+			current.file_retrieval_method = "Attachment";
+			current.type = "File";
+			
+			//Data source needs to be created before we can trigger the commands below, so we create the record outside of the normal record producer method
+			current.insert();
+			
+			// Process file into data source record
+			var loader = new GlideImportSetLoader();
+			var importSetRec = loader.getImportSetGr(current);
+			
+			// Import data from data source to import set table (based on form import type selection record)
+			var ranload = loader.loadImportSetTable(importSetRec, current);
+			importSetRec.state = "loaded";
+			importSetRec.update();
+			var sysID = importSetRec.sys_id;
+      //Redirect to the import preview ui page
+			producer.redirect = 'swis_easy_import.do?sysparm_import_set=' + sysID + '&sysparm_wizard=' + producer.type;
+
+		}
+	}
+}
