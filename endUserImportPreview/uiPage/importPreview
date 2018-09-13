@@ -1,0 +1,67 @@
+<!--XML-->
+<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+<g:requires name="scripts/lib/jquery_includes.js" includes="true"/>
+	<html>
+		<h2>Import Summary</h2>
+		<div style="font-size:16px">Click 'Submit' to complete the import or 'Cancel' to start over</div>
+	</html>
+	<g:evaluate jelly="true">
+		var importSet = jelly.RP.getParameterValue('sysparm_import_set');
+		var wizard = jelly.RP.getParameterValue('sysparm_wizard');
+		//gs.log('Wizard: ' + wizard + ', import set: ' + importSet);
+		var importRec = new GlideRecord('sys_import_set');
+		importRec.get(importSet);
+		var dataSource = importRec.data_source;
+		var wizardConfig = new GlideRecord('[YOUR_WIZARD_CONFIG_TABLE_NAME]');
+		wizardConfig.get(wizard);
+		//gs.log('wizard record: ' + wizardConfig.u_import_type);
+		var transformMap = wizardConfig.u_transform_map.toString();
+		//Run the transform emulator, which will return the number of updates, inserts, and errors due to invalid references
+		var helper = new [YOUR_SCRIPT_INCLUDE_NAME](); 
+		var importSummary = JSON.parse(helper.transformEmulator(importRec, wizardConfig));
+		var updates = importSummary.updates;
+		var inserts = importSummary.inserts;
+		var refErr = importSummary.refErr;
+	</g:evaluate>
+	<script>
+		document.write('<table table-layout="fixed" class="import_summary"><tr><td><strong>Updates:</strong></td><td style="padding-left:5px">${updates}</td></tr><tr><td><strong>Inserts: </strong></td><td style="padding-left:5px">${inserts}</td></tr><tr></tr><tr><td valign="top"><strong>Errors: </strong> </td>${refErr}</tr></table>');
+	</script>
+<table style="width:100%"><tr><td style="margin-left:10px"><button type="button" class="btn btn-danger" style="float:left; margin:5px" onclick="goBack('${importSet}', '${dataSource}')">Cancel</button><button type="button" class="btn btn-primary" style="float:left; margin:5px" onclick="transformData('${transformMap}' , '${importSet}')">Submit</button></td></tr></table>
+	<style>
+		.import_summary {
+			font-size:16px;
+			float:left; 
+			margin-left:10px; 
+			margin-top:5px; 
+		}
+
+	</style>
+</j:jelly>
+
+
+/*Client Script*/
+
+function transformData(transformMap, importSet){
+	confirm("Are you sure you want to submit? Data will be modified.");
+	var transformAjax = new GlideAjax('swisTransformEmulator');
+	transformAjax.addParam('sysparm_name', 'submitTransform');
+	transformAjax.addParam('sysparm_transformMap', transformMap);
+	transformAjax.addParam('sysparm_importSet', importSet);
+	transformAjax.getXML(_getTransformAggregate);
+		}
+function _getTransformAggregate(response){
+	var answer = response.responseXML.documentElement.getAttribute("answer");
+	window.location = "home.do";
+}
+function goBack(importSet, dataSource){
+	var deleteAjax = new GlideAjax('[YOUR_SCRIPT_INCLUDE_NAME');
+	deleteAjax.addParam('sysparm_name', 'deleteImportSet');
+	deleteAjax.addParam('sysparm_importSet', importSet);
+	deleteAjax.addParam('sysparm_dataSource', dataSource);
+	deleteAjax.getXML(_getDeleteAggregate);
+}
+function _getDeleteAggregate(response){
+	var answer = response.responseXML.documentElement.getAttribute("answer");
+	window.location = "com.glideapp.servicecatalog_cat_item_view.do?sysparm_id=[YOUR_RP_SYS_ID]";
+}
